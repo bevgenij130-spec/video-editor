@@ -1,0 +1,1103 @@
+From 36a6c48daea4a3bb7db5ec7161705f3d8a556f5f Mon Sep 17 00:00:00 2001
+From: "qwen.ai[bot]" <qwenlm-intl@service.alibaba.com>
+Date: Wed, 23 Sep 2026 15:12:48 +0000
+Subject: [PATCH] feat: video editor skeleton (layout, stores, backend modules,
+ deps)
+
+Frontend:
+- deps: zustand, immer, pixi.js, zundo; tailwindcss + @tailwindcss/vite (dev)
+- Tailwind v4 via vite plugin, src/styles/globals.css imported in main.tsx
+- zustand slices (project/playback/timeline/media/ui), editorStore, history middleware
+- Pixi-based TimelinePixi + ClipOverlay, PreviewCanvas, TransportControls
+- hooks useTauriCommand/useVideoFrame, lib tauriBridge/pixiRenderer
+- App.tsx: full-window dark layout (left sidebar, top preview, bottom timeline);
+  calls greet command via invoke and logs the result
+
+Backend (src-tauri):
+- deps: tokio, anyhow, thiserror, wgpu, cpal, rubato (serde/serde_json kept)
+- skeleton modules: commands, decoder, audio, gpu, proxy, project (registered in lib.rs)
+- greet(name: String) -> 'Hello, {}! Video editor is ready.' in invoke_handler
+---
+ package.json                                  |  14 ++-
+ src-tauri/Cargo.toml                          |   6 +
+ src-tauri/src/audio/clock.rs                  |   1 +
+ src-tauri/src/audio/engine.rs                 |   1 +
+ src-tauri/src/audio/mod.rs                    |   4 +
+ src-tauri/src/commands/export.rs              |   3 +
+ src-tauri/src/commands/media.rs               |   3 +
+ src-tauri/src/commands/mod.rs                 |   6 +
+ src-tauri/src/commands/playback.rs            |   3 +
+ src-tauri/src/commands/project.rs             |   3 +
+ src-tauri/src/decoder/hwaccel.rs              |   1 +
+ src-tauri/src/decoder/mod.rs                  |   5 +
+ src-tauri/src/decoder/pool.rs                 |   1 +
+ src-tauri/src/decoder/worker.rs               |   1 +
+ src-tauri/src/gpu/context.rs                  |   1 +
+ src-tauri/src/gpu/mod.rs                      |   5 +
+ src-tauri/src/gpu/texture_import.rs           |   1 +
+ src-tauri/src/lib.rs                          |  15 ++-
+ src-tauri/src/project/mod.rs                  |   3 +
+ src-tauri/src/project/schema.rs               |   1 +
+ src-tauri/src/proxy/generator.rs              |   1 +
+ src-tauri/src/proxy/keyframe_index.rs         |   1 +
+ src-tauri/src/proxy/mod.rs                    |   4 +
+ src/App.css                                   | 116 ------------------
+ src/App.tsx                                   |  77 ++++++------
+ src/components/Controls/TransportControls.tsx |  23 ++++
+ src/components/Preview/PreviewCanvas.tsx      |  19 +++
+ src/components/Timeline/ClipOverlay.tsx       |   9 ++
+ src/components/Timeline/TimelinePixi.tsx      |  36 ++++++
+ src/hooks/useTauriCommand.ts                  |  42 +++++++
+ src/hooks/useVideoFrame.ts                    |  15 +++
+ src/lib/pixiRenderer.ts                       |  40 ++++++
+ src/lib/tauriBridge.ts                        |  12 ++
+ src/main.tsx                                  |   1 +
+ src/stores/editorStore.ts                     |  36 ++++++
+ src/stores/historyMiddleware.ts               |  13 ++
+ src/stores/slices/mediaSlice.ts               |  34 +++++
+ src/stores/slices/playbackSlice.ts            |  32 +++++
+ src/stores/slices/projectSlice.ts             |  32 +++++
+ src/stores/slices/timelineSlice.ts            |  33 +++++
+ src/stores/slices/uiSlice.ts                  |  28 +++++
+ src/styles/globals.css                        |  10 ++
+ vite.config.ts                                |   3 +-
+ 43 files changed, 532 insertions(+), 163 deletions(-)
+ create mode 100644 src-tauri/src/audio/clock.rs
+ create mode 100644 src-tauri/src/audio/engine.rs
+ create mode 100644 src-tauri/src/audio/mod.rs
+ create mode 100644 src-tauri/src/commands/export.rs
+ create mode 100644 src-tauri/src/commands/media.rs
+ create mode 100644 src-tauri/src/commands/mod.rs
+ create mode 100644 src-tauri/src/commands/playback.rs
+ create mode 100644 src-tauri/src/commands/project.rs
+ create mode 100644 src-tauri/src/decoder/hwaccel.rs
+ create mode 100644 src-tauri/src/decoder/mod.rs
+ create mode 100644 src-tauri/src/decoder/pool.rs
+ create mode 100644 src-tauri/src/decoder/worker.rs
+ create mode 100644 src-tauri/src/gpu/context.rs
+ create mode 100644 src-tauri/src/gpu/mod.rs
+ create mode 100644 src-tauri/src/gpu/texture_import.rs
+ create mode 100644 src-tauri/src/project/mod.rs
+ create mode 100644 src-tauri/src/project/schema.rs
+ create mode 100644 src-tauri/src/proxy/generator.rs
+ create mode 100644 src-tauri/src/proxy/keyframe_index.rs
+ create mode 100644 src-tauri/src/proxy/mod.rs
+ delete mode 100644 src/App.css
+ create mode 100644 src/components/Controls/TransportControls.tsx
+ create mode 100644 src/components/Preview/PreviewCanvas.tsx
+ create mode 100644 src/components/Timeline/ClipOverlay.tsx
+ create mode 100644 src/components/Timeline/TimelinePixi.tsx
+ create mode 100644 src/hooks/useTauriCommand.ts
+ create mode 100644 src/hooks/useVideoFrame.ts
+ create mode 100644 src/lib/pixiRenderer.ts
+ create mode 100644 src/lib/tauriBridge.ts
+ create mode 100644 src/stores/editorStore.ts
+ create mode 100644 src/stores/historyMiddleware.ts
+ create mode 100644 src/stores/slices/mediaSlice.ts
+ create mode 100644 src/stores/slices/playbackSlice.ts
+ create mode 100644 src/stores/slices/projectSlice.ts
+ create mode 100644 src/stores/slices/timelineSlice.ts
+ create mode 100644 src/stores/slices/uiSlice.ts
+ create mode 100644 src/styles/globals.css
+
+diff --git a/package.json b/package.json
+index a70df5f..554894a 100644
+--- a/package.json
++++ b/package.json
+@@ -10,17 +10,23 @@
+     "tauri": "tauri"
+   },
+   "dependencies": {
++    "@tauri-apps/api": "^2",
++    "@tauri-apps/plugin-opener": "^2",
++    "immer": "^11.1.18",
++    "pixi.js": "^8.21.0",
+     "react": "^19.1.0",
+     "react-dom": "^19.1.0",
+-    "@tauri-apps/api": "^2",
+-    "@tauri-apps/plugin-opener": "^2"
++    "zundo": "^2.3.0",
++    "zustand": "^5.0.15"
+   },
+   "devDependencies": {
++    "@tailwindcss/vite": "^4.3.3",
++    "@tauri-apps/cli": "^2",
+     "@types/react": "^19.1.8",
+     "@types/react-dom": "^19.1.6",
+     "@vitejs/plugin-react": "^6.0.2",
++    "tailwindcss": "^4.3.3",
+     "typescript": "~6.0.3",
+-    "vite": "^8.0.16",
+-    "@tauri-apps/cli": "^2"
++    "vite": "^8.0.16"
+   }
+ }
+diff --git a/src-tauri/Cargo.toml b/src-tauri/Cargo.toml
+index 50f0c0f..d8b80c1 100644
+--- a/src-tauri/Cargo.toml
++++ b/src-tauri/Cargo.toml
+@@ -22,6 +22,12 @@ tauri = { version = "2", features = [] }
+ tauri-plugin-opener = "2"
+ serde = { version = "1", features = ["derive"] }
+ serde_json = "1"
++tokio = { version = "1", features = ["full"] }
++anyhow = "1"
++thiserror = "2"
++wgpu = "24"
++cpal = "0.18"
++rubato = "0.16"
+ 
+ 
+ # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+diff --git a/src-tauri/src/audio/clock.rs b/src-tauri/src/audio/clock.rs
+new file mode 100644
+index 0000000..764c36e
+--- /dev/null
++++ b/src-tauri/src/audio/clock.rs
+@@ -0,0 +1 @@
++//! Master playback clock — skeleton only.
+diff --git a/src-tauri/src/audio/engine.rs b/src-tauri/src/audio/engine.rs
+new file mode 100644
+index 0000000..0cfc4e2
+--- /dev/null
++++ b/src-tauri/src/audio/engine.rs
+@@ -0,0 +1 @@
++//! Audio engine / device I/O — skeleton only.
+diff --git a/src-tauri/src/audio/mod.rs b/src-tauri/src/audio/mod.rs
+new file mode 100644
+index 0000000..7df6426
+--- /dev/null
++++ b/src-tauri/src/audio/mod.rs
+@@ -0,0 +1,4 @@
++//! Audio subsystem (cpal + rubato, 48 kHz) — skeleton only.
++
++pub mod clock;
++pub mod engine;
+diff --git a/src-tauri/src/commands/export.rs b/src-tauri/src/commands/export.rs
+new file mode 100644
+index 0000000..aff586a
+--- /dev/null
++++ b/src-tauri/src/commands/export.rs
+@@ -0,0 +1,3 @@
++//! Export commands — skeleton only.
++
++// Placeholder: tauri commands for the export subsystem will live here.
+diff --git a/src-tauri/src/commands/media.rs b/src-tauri/src/commands/media.rs
+new file mode 100644
+index 0000000..114adc4
+--- /dev/null
++++ b/src-tauri/src/commands/media.rs
+@@ -0,0 +1,3 @@
++//! Media commands — skeleton only.
++
++// Placeholder: tauri commands for the media subsystem will live here.
+diff --git a/src-tauri/src/commands/mod.rs b/src-tauri/src/commands/mod.rs
+new file mode 100644
+index 0000000..f0c1b91
+--- /dev/null
++++ b/src-tauri/src/commands/mod.rs
+@@ -0,0 +1,6 @@
++//! Tauri command handlers (skeleton — no logic yet).
++
++pub mod export;
++pub mod media;
++pub mod playback;
++pub mod project;
+diff --git a/src-tauri/src/commands/playback.rs b/src-tauri/src/commands/playback.rs
+new file mode 100644
+index 0000000..7e6a318
+--- /dev/null
++++ b/src-tauri/src/commands/playback.rs
+@@ -0,0 +1,3 @@
++//! Playback commands — skeleton only.
++
++// Placeholder: tauri commands for the playback subsystem will live here.
+diff --git a/src-tauri/src/commands/project.rs b/src-tauri/src/commands/project.rs
+new file mode 100644
+index 0000000..65e9b38
+--- /dev/null
++++ b/src-tauri/src/commands/project.rs
+@@ -0,0 +1,3 @@
++//! Project commands — skeleton only.
++
++// Placeholder: tauri commands for the project subsystem will live here.
+diff --git a/src-tauri/src/decoder/hwaccel.rs b/src-tauri/src/decoder/hwaccel.rs
+new file mode 100644
+index 0000000..1d79796
+--- /dev/null
++++ b/src-tauri/src/decoder/hwaccel.rs
+@@ -0,0 +1 @@
++//! Hardware acceleration backend selection — skeleton only.
+diff --git a/src-tauri/src/decoder/mod.rs b/src-tauri/src/decoder/mod.rs
+new file mode 100644
+index 0000000..b36b1de
+--- /dev/null
++++ b/src-tauri/src/decoder/mod.rs
+@@ -0,0 +1,5 @@
++//! Video decoding pipeline (Rust-side, no WebCodecs) — skeleton only.
++
++pub mod hwaccel;
++pub mod pool;
++pub mod worker;
+diff --git a/src-tauri/src/decoder/pool.rs b/src-tauri/src/decoder/pool.rs
+new file mode 100644
+index 0000000..141d203
+--- /dev/null
++++ b/src-tauri/src/decoder/pool.rs
+@@ -0,0 +1 @@
++//! Decoder worker pool — skeleton only.
+diff --git a/src-tauri/src/decoder/worker.rs b/src-tauri/src/decoder/worker.rs
+new file mode 100644
+index 0000000..e85ed78
+--- /dev/null
++++ b/src-tauri/src/decoder/worker.rs
+@@ -0,0 +1 @@
++//! Single decoder worker (intra-frame proxies: ProRes/DNxHR) — skeleton only.
+diff --git a/src-tauri/src/gpu/context.rs b/src-tauri/src/gpu/context.rs
+new file mode 100644
+index 0000000..fac690a
+--- /dev/null
++++ b/src-tauri/src/gpu/context.rs
+@@ -0,0 +1 @@
++//! wgpu instance/device/surface setup — skeleton only.
+diff --git a/src-tauri/src/gpu/mod.rs b/src-tauri/src/gpu/mod.rs
+new file mode 100644
+index 0000000..8bdbe69
+--- /dev/null
++++ b/src-tauri/src/gpu/mod.rs
+@@ -0,0 +1,5 @@
++//! GPU layer (wgpu) — zero-copy texture import with shared-memory fallback.
++//! Skeleton only.
++
++pub mod context;
++pub mod texture_import;
+diff --git a/src-tauri/src/gpu/texture_import.rs b/src-tauri/src/gpu/texture_import.rs
+new file mode 100644
+index 0000000..4b57b53
+--- /dev/null
++++ b/src-tauri/src/gpu/texture_import.rs
+@@ -0,0 +1 @@
++//! External frame / texture import (zero-copy) — skeleton only.
+diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
+index 4a277ef..238dea2 100644
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -1,7 +1,18 @@
++//! Video editor backend skeleton (Tauri 2).
++//!
++//! Modules are placeholders only — no decoding/timeline/export logic yet.
++
++pub mod audio;
++pub mod commands;
++pub mod decoder;
++pub mod gpu;
++pub mod project;
++pub mod proxy;
++
+ // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+ #[tauri::command]
+-fn greet(name: &str) -> String {
+-    format!("Hello, {}! You've been greeted from Rust!", name)
++fn greet(name: String) -> String {
++    format!("Hello, {}! Video editor is ready.", name)
+ }
+ 
+ #[cfg_attr(mobile, tauri::mobile_entry_point)]
+diff --git a/src-tauri/src/project/mod.rs b/src-tauri/src/project/mod.rs
+new file mode 100644
+index 0000000..0c530fb
+--- /dev/null
++++ b/src-tauri/src/project/mod.rs
+@@ -0,0 +1,3 @@
++//! Project model & persistence — skeleton only.
++
++pub mod schema;
+diff --git a/src-tauri/src/project/schema.rs b/src-tauri/src/project/schema.rs
+new file mode 100644
+index 0000000..710f4b1
+--- /dev/null
++++ b/src-tauri/src/project/schema.rs
+@@ -0,0 +1 @@
++//! Project file schema (serde types) — skeleton only.
+diff --git a/src-tauri/src/proxy/generator.rs b/src-tauri/src/proxy/generator.rs
+new file mode 100644
+index 0000000..64dc072
+--- /dev/null
++++ b/src-tauri/src/proxy/generator.rs
+@@ -0,0 +1 @@
++//! Proxy file generator — skeleton only.
+diff --git a/src-tauri/src/proxy/keyframe_index.rs b/src-tauri/src/proxy/keyframe_index.rs
+new file mode 100644
+index 0000000..18adb3d
+--- /dev/null
++++ b/src-tauri/src/proxy/keyframe_index.rs
+@@ -0,0 +1 @@
++//! Keyframe index for instant seeking — skeleton only.
+diff --git a/src-tauri/src/proxy/mod.rs b/src-tauri/src/proxy/mod.rs
+new file mode 100644
+index 0000000..19f8831
+--- /dev/null
++++ b/src-tauri/src/proxy/mod.rs
+@@ -0,0 +1,4 @@
++//! Proxy generation & indexing (intra-frame ProRes/DNxHR) — skeleton only.
++
++pub mod generator;
++pub mod keyframe_index;
+diff --git a/src/App.css b/src/App.css
+deleted file mode 100644
+index 85f7a4a..0000000
+--- a/src/App.css
++++ /dev/null
+@@ -1,116 +0,0 @@
+-.logo.vite:hover {
+-  filter: drop-shadow(0 0 2em #747bff);
+-}
+-
+-.logo.react:hover {
+-  filter: drop-shadow(0 0 2em #61dafb);
+-}
+-:root {
+-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+-  font-size: 16px;
+-  line-height: 24px;
+-  font-weight: 400;
+-
+-  color: #0f0f0f;
+-  background-color: #f6f6f6;
+-
+-  font-synthesis: none;
+-  text-rendering: optimizeLegibility;
+-  -webkit-font-smoothing: antialiased;
+-  -moz-osx-font-smoothing: grayscale;
+-  -webkit-text-size-adjust: 100%;
+-}
+-
+-.container {
+-  margin: 0;
+-  padding-top: 10vh;
+-  display: flex;
+-  flex-direction: column;
+-  justify-content: center;
+-  text-align: center;
+-}
+-
+-.logo {
+-  height: 6em;
+-  padding: 1.5em;
+-  will-change: filter;
+-  transition: 0.75s;
+-}
+-
+-.logo.tauri:hover {
+-  filter: drop-shadow(0 0 2em #24c8db);
+-}
+-
+-.row {
+-  display: flex;
+-  justify-content: center;
+-}
+-
+-a {
+-  font-weight: 500;
+-  color: #646cff;
+-  text-decoration: inherit;
+-}
+-
+-a:hover {
+-  color: #535bf2;
+-}
+-
+-h1 {
+-  text-align: center;
+-}
+-
+-input,
+-button {
+-  border-radius: 8px;
+-  border: 1px solid transparent;
+-  padding: 0.6em 1.2em;
+-  font-size: 1em;
+-  font-weight: 500;
+-  font-family: inherit;
+-  color: #0f0f0f;
+-  background-color: #ffffff;
+-  transition: border-color 0.25s;
+-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+-}
+-
+-button {
+-  cursor: pointer;
+-}
+-
+-button:hover {
+-  border-color: #396cd8;
+-}
+-button:active {
+-  border-color: #396cd8;
+-  background-color: #e8e8e8;
+-}
+-
+-input,
+-button {
+-  outline: none;
+-}
+-
+-#greet-input {
+-  margin-right: 5px;
+-}
+-
+-@media (prefers-color-scheme: dark) {
+-  :root {
+-    color: #f6f6f6;
+-    background-color: #2f2f2f;
+-  }
+-
+-  a:hover {
+-    color: #24c8db;
+-  }
+-
+-  input,
+-  button {
+-    color: #ffffff;
+-    background-color: #0f0f0f98;
+-  }
+-  button:active {
+-    background-color: #0f0f0f69;
+-  }
+-}
+diff --git a/src/App.tsx b/src/App.tsx
+index 8286a76..fa8bf79 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -1,50 +1,47 @@
+-import { useState } from "react";
+-import reactLogo from "./assets/react.svg";
++import { useEffect } from "react";
+ import { invoke } from "@tauri-apps/api/core";
+-import "./App.css";
++import { PreviewCanvas } from "./components/Preview/PreviewCanvas";
++import { TransportControls } from "./components/Controls/TransportControls";
++import { TimelinePixi } from "./components/Timeline/TimelinePixi";
+ 
++/** Editor skeleton layout: sidebar | (preview over timeline), full window. */
+ function App() {
+-  const [greetMsg, setGreetMsg] = useState("");
+-  const [name, setName] = useState("");
+-
+-  async function greet() {
+-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+-    setGreetMsg(await invoke("greet", { name }));
+-  }
++  useEffect(() => {
++    invoke<string>("greet", { name: "editor" })
++      .then((msg) => console.log(msg))
++      .catch((err) => console.error(err));
++  }, []);
+ 
+   return (
+-    <main className="container">
+-      <h1>Welcome to Tauri + React</h1>
++    <div className="flex h-screen w-screen select-none overflow-hidden bg-zinc-950 text-zinc-100">
++      {/* Left vertical tool sidebar */}
++      <aside className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-zinc-800 bg-zinc-900 py-3">
++        <button type="button" className="h-9 w-9 rounded bg-zinc-800 text-sm hover:bg-zinc-700" title="Select">
++          ▸
++        </button>
++        <button type="button" className="h-9 w-9 rounded bg-zinc-800 text-sm hover:bg-zinc-700" title="Razor">
++          ✂
++        </button>
++        <button type="button" className="h-9 w-9 rounded bg-zinc-800 text-sm hover:bg-zinc-700" title="Hand">
++          ✋
++        </button>
++      </aside>
++
++      {/* Main column: preview on top, timeline at bottom */}
++      <main className="flex min-w-0 flex-1 flex-col">
++        {/* Preview area (dark) */}
++        <section className="min-h-0 flex-1 bg-zinc-900">
++          <PreviewCanvas />
++        </section>
+ 
+-      <div className="row">
+-        <a href="https://vite.dev" target="_blank">
+-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
+-        </a>
+-        <a href="https://tauri.app" target="_blank">
+-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
+-        </a>
+-        <a href="https://react.dev" target="_blank">
+-          <img src={reactLogo} className="logo react" alt="React logo" />
+-        </a>
+-      </div>
+-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
++        <TransportControls />
+ 
+-      <form
+-        className="row"
+-        onSubmit={(e) => {
+-          e.preventDefault();
+-          greet();
+-        }}
+-      >
+-        <input
+-          id="greet-input"
+-          onChange={(e) => setName(e.currentTarget.value)}
+-          placeholder="Enter a name..."
+-        />
+-        <button type="submit">Greet</button>
+-      </form>
+-      <p>{greetMsg}</p>
+-    </main>
++        {/* Timeline area (darker) */}
++        <section className="h-64 shrink-0 border-t border-zinc-800 bg-[#0d0d10]">
++          <TimelinePixi />
++        </section>
++      </main>
++    </div>
+   );
+ }
+ 
+diff --git a/src/components/Controls/TransportControls.tsx b/src/components/Controls/TransportControls.tsx
+new file mode 100644
+index 0000000..d70175a
+--- /dev/null
++++ b/src/components/Controls/TransportControls.tsx
+@@ -0,0 +1,23 @@
++import { useEditorStore } from "../../stores/editorStore";
++
++/**
++ * Transport bar (play/pause/seek) — skeleton buttons wired to store state.
++ */
++export function TransportControls() {
++  const isPlaying = useEditorStore((s) => s.isPlaying);
++
++  return (
++    <div className="flex items-center gap-2 px-3 py-1">
++      <button
++        type="button"
++        className="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
++        aria-label={isPlaying ? "Pause" : "Play"}
++      >
++        {isPlaying ? "⏸" : "▶"}
++      </button>
++      <span className="font-mono text-xs text-zinc-400">00:00:00:00</span>
++    </div>
++  );
++}
++
++export default TransportControls;
+diff --git a/src/components/Preview/PreviewCanvas.tsx b/src/components/Preview/PreviewCanvas.tsx
+new file mode 100644
+index 0000000..4cf2b98
+--- /dev/null
++++ b/src/components/Preview/PreviewCanvas.tsx
+@@ -0,0 +1,19 @@
++import { useRef } from "react";
++import { useVideoFrame } from "../../hooks/useVideoFrame";
++
++/**
++ * Preview surface. Frames will be delivered from the Rust decoder
++ * (GPU texture / shared memory). Skeleton only.
++ */
++export function PreviewCanvas() {
++  const canvasRef = useRef<HTMLCanvasElement | null>(null);
++  useVideoFrame(canvasRef, null);
++
++  return (
++    <div className="flex h-full w-full items-center justify-center bg-black">
++      <canvas ref={canvasRef} className="h-full w-full" />
++    </div>
++  );
++}
++
++export default PreviewCanvas;
+diff --git a/src/components/Timeline/ClipOverlay.tsx b/src/components/Timeline/ClipOverlay.tsx
+new file mode 100644
+index 0000000..1e23dc6
+--- /dev/null
++++ b/src/components/Timeline/ClipOverlay.tsx
+@@ -0,0 +1,9 @@
++/**
++ * DOM overlay above the Pixi timeline canvas (selection handles,
++ * labels). Skeleton only — renders nothing yet.
++ */
++export function ClipOverlay() {
++  return <div className="pointer-events-none absolute inset-0" />;
++}
++
++export default ClipOverlay;
+diff --git a/src/components/Timeline/TimelinePixi.tsx b/src/components/Timeline/TimelinePixi.tsx
+new file mode 100644
+index 0000000..8b26173
+--- /dev/null
++++ b/src/components/Timeline/TimelinePixi.tsx
+@@ -0,0 +1,36 @@
++import { useEffect, useRef } from "react";
++import { initPixiRenderer, type PixiRendererHandle } from "../../lib/pixiRenderer";
++import { ClipOverlay } from "./ClipOverlay";
++
++/**
++ * Timeline area rendered with Pixi.js (skeleton — no clips drawn yet).
++ */
++export function TimelinePixi() {
++  const hostRef = useRef<HTMLDivElement | null>(null);
++
++  useEffect(() => {
++    let renderer: PixiRendererHandle | null = null;
++    let cancelled = false;
++
++    if (hostRef.current) {
++      initPixiRenderer(hostRef.current).then((h) => {
++        if (cancelled) h.destroy();
++        else renderer = h;
++      });
++    }
++
++    return () => {
++      cancelled = true;
++      renderer?.destroy();
++    };
++  }, []);
++
++  return (
++    <div className="relative h-full w-full bg-[#0d0d10]">
++      <div ref={hostRef} className="absolute inset-0" />
++      <ClipOverlay />
++    </div>
++  );
++}
++
++export default TimelinePixi;
+diff --git a/src/hooks/useTauriCommand.ts b/src/hooks/useTauriCommand.ts
+new file mode 100644
+index 0000000..966babf
+--- /dev/null
++++ b/src/hooks/useTauriCommand.ts
+@@ -0,0 +1,42 @@
++import { useCallback, useState } from "react";
++import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
++
++interface UseTauriCommandResult<TArgs extends InvokeArgs, TResult> {
++  result: TResult | null;
++  error: string | null;
++  loading: boolean;
++  /** Invoke the command with args. Skeleton wrapper over `invoke`. */
++  run: (args: TArgs) => Promise<TResult | null>;
++}
++
++/**
++ * Generic hook for calling a Tauri command without blocking the UI.
++ * Skeleton only — no caching/abort logic yet.
++ */
++export function useTauriCommand<TArgs extends InvokeArgs, TResult>(
++  command: string,
++): UseTauriCommandResult<TArgs, TResult> {
++  const [result, setResult] = useState<TResult | null>(null);
++  const [error, setError] = useState<string | null>(null);
++  const [loading, setLoading] = useState(false);
++
++  const run = useCallback(
++    async (args: TArgs): Promise<TResult | null> => {
++      setLoading(true);
++      setError(null);
++      try {
++        const res = await invoke<TResult>(command, args);
++        setResult(res);
++        return res;
++      } catch (e) {
++        setError(String(e));
++        return null;
++      } finally {
++        setLoading(false);
++      }
++    },
++    [command],
++  );
++
++  return { result, error, loading, run };
++}
+diff --git a/src/hooks/useVideoFrame.ts b/src/hooks/useVideoFrame.ts
+new file mode 100644
+index 0000000..02ad433
+--- /dev/null
++++ b/src/hooks/useVideoFrame.ts
+@@ -0,0 +1,15 @@
++import { useEffect } from "react";
++
++/**
++ * Subscribes to decoded video frames pushed from the Rust backend
++ * (zero-copy GPU textures with shared-memory fallback). Skeleton only:
++ * decoding lives entirely in Rust — no WebCodecs here.
++ */
++export function useVideoFrame(
++  _canvasRef: React.RefObject<HTMLCanvasElement | null>,
++  _clipId: string | null,
++): void {
++  useEffect(() => {
++    // Placeholder: listen for Tauri frame events and blit them via pixiRenderer.
++  }, [_canvasRef, _clipId]);
++}
+diff --git a/src/lib/pixiRenderer.ts b/src/lib/pixiRenderer.ts
+new file mode 100644
+index 0000000..46bed3f
+--- /dev/null
++++ b/src/lib/pixiRenderer.ts
+@@ -0,0 +1,40 @@
++import { Application, Container } from "pixi.js";
++
++/**
++ * Pixi.js renderer bootstrap for the timeline — skeleton only.
++ * The actual clip/track rendering layers will be built on top of this.
++ */
++export interface PixiRendererHandle {
++  app: Application;
++  root: Container;
++  destroy: () => void;
++}
++
++let handle: PixiRendererHandle | null = null;
++
++export async function initPixiRenderer(
++  host: HTMLElement,
++): Promise<PixiRendererHandle> {
++  if (handle) return handle;
++
++  const app = new Application();
++  await app.init({
++    background: 0x0d0d10,
++    resizeTo: host,
++    antialias: false,
++  });
++  host.appendChild(app.canvas);
++
++  const root = new Container();
++  app.stage.addChild(root);
++
++  handle = {
++    app,
++    root,
++    destroy: () => {
++      app.destroy(true, { children: true });
++      handle = null;
++    },
++  };
++  return handle;
++}
+diff --git a/src/lib/tauriBridge.ts b/src/lib/tauriBridge.ts
+new file mode 100644
+index 0000000..98b4f59
+--- /dev/null
++++ b/src/lib/tauriBridge.ts
+@@ -0,0 +1,12 @@
++import { invoke } from "@tauri-apps/api/core";
++
++/**
++ * Thin typed bridge over Tauri `invoke`. All frontend -> Rust calls
++ * should go through this module. Skeleton only.
++ */
++export async function greet(name: string): Promise<string> {
++  return invoke<string>("greet", { name });
++}
++
++// Placeholder: projectOpen / mediaImport / playbackSeek / exportStart bridges
++// will be added here as backend commands are implemented.
+diff --git a/src/main.tsx b/src/main.tsx
+index 2be325e..85f30fd 100644
+--- a/src/main.tsx
++++ b/src/main.tsx
+@@ -1,6 +1,7 @@
+ import React from "react";
+ import ReactDOM from "react-dom/client";
+ import App from "./App";
++import "./styles/globals.css";
+ 
+ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+   <React.StrictMode>
+diff --git a/src/stores/editorStore.ts b/src/stores/editorStore.ts
+new file mode 100644
+index 0000000..9ebd2ec
+--- /dev/null
++++ b/src/stores/editorStore.ts
+@@ -0,0 +1,36 @@
++import { create } from "zustand";
++import { combine } from "zustand/middleware";
++import {
++  createProjectSlice,
++  type ProjectSlice,
++} from "./slices/projectSlice";
++import {
++  createPlaybackSlice,
++  type PlaybackSlice,
++} from "./slices/playbackSlice";
++import {
++  createTimelineSlice,
++  type TimelineSlice,
++} from "./slices/timelineSlice";
++import { createMediaSlice, type MediaSlice } from "./slices/mediaSlice";
++import { createUiSlice, type UiSlice } from "./slices/uiSlice";
++
++/** Combined editor store state (skeleton — no logic yet). */
++export type EditorState = ProjectSlice &
++  PlaybackSlice &
++  TimelineSlice &
++  MediaSlice &
++  UiSlice;
++
++export const useEditorStore = create<EditorState>()(
++  combine(
++    {} as EditorState,
++    (set, get, api) => ({
++      ...createProjectSlice(set, get, api),
++      ...createPlaybackSlice(set, get, api),
++      ...createTimelineSlice(set, get, api),
++      ...createMediaSlice(set, get, api),
++      ...createUiSlice(set, get, api),
++    }),
++  ),
++);
+diff --git a/src/stores/historyMiddleware.ts b/src/stores/historyMiddleware.ts
+new file mode 100644
+index 0000000..99efb96
+--- /dev/null
++++ b/src/stores/historyMiddleware.ts
+@@ -0,0 +1,13 @@
++import type { StateCreator } from "zustand";
++import { temporal, type TemporalState, type Zundo } from "zundo";
++
++/**
++ * History (undo/redo) middleware — skeleton only.
++ * Wraps the editor store with zundo (immer-friendly). Actual
++ * undo/redo wiring and selective partialization come later.
++ */
++export const historyMiddleware = <T extends object>(
++  config: StateCreator<T, [], []>,
++) => temporal(config);
++
++export type { TemporalState, Zundo };
+diff --git a/src/stores/slices/mediaSlice.ts b/src/stores/slices/mediaSlice.ts
+new file mode 100644
+index 0000000..f56c13f
+--- /dev/null
++++ b/src/stores/slices/mediaSlice.ts
+@@ -0,0 +1,34 @@
++import type { StateCreator } from "zustand";
++
++/** Media pool slice — skeleton only (import / proxy generation come later). */
++export interface MediaItem {
++  id: string;
++  name: string;
++  path: string;
++  durationSec: number;
++}
++
++export interface MediaState {
++  items: MediaItem[];
++}
++
++export interface MediaActions {
++  // Placeholder: importMedia / generateProxies will come later.
++  noopMedia: () => void;
++}
++
++export type MediaSlice = MediaState & MediaActions;
++
++const initialMediaState: MediaState = {
++  items: [],
++};
++
++export const createMediaSlice: StateCreator<
++  MediaSlice,
++  [],
++  [],
++  MediaSlice
++> = (set) => ({
++  ...initialMediaState,
++  noopMedia: () => set(() => ({})),
++});
+diff --git a/src/stores/slices/playbackSlice.ts b/src/stores/slices/playbackSlice.ts
+new file mode 100644
+index 0000000..5467761
+--- /dev/null
++++ b/src/stores/slices/playbackSlice.ts
+@@ -0,0 +1,32 @@
++import type { StateCreator } from "zustand";
++
++/** Playback slice — skeleton only (audio clock @48kHz integration comes later). */
++export interface PlaybackState {
++  isPlaying: boolean;
++  /** Current playhead position in seconds. */
++  currentTime: number;
++  playbackRate: number;
++}
++
++export interface PlaybackActions {
++  // Placeholder: play / pause / seek will come later.
++  noopPlayback: () => void;
++}
++
++export type PlaybackSlice = PlaybackState & PlaybackActions;
++
++const initialPlaybackState: PlaybackState = {
++  isPlaying: false,
++  currentTime: 0,
++  playbackRate: 1,
++};
++
++export const createPlaybackSlice: StateCreator<
++  PlaybackSlice,
++  [],
++  [],
++  PlaybackSlice
++> = (set) => ({
++  ...initialPlaybackState,
++  noopPlayback: () => set(() => ({})),
++});
+diff --git a/src/stores/slices/projectSlice.ts b/src/stores/slices/projectSlice.ts
+new file mode 100644
+index 0000000..09093e7
+--- /dev/null
++++ b/src/stores/slices/projectSlice.ts
+@@ -0,0 +1,32 @@
++import type { StateCreator } from "zustand";
++
++/** Project slice — skeleton only (no logic yet). */
++export interface ProjectState {
++  projectName: string;
++  projectPath: string | null;
++  /** Timebase of the current project, e.g. 25, 30, 60 fps. */
++  timebase: number;
++}
++
++export interface ProjectActions {
++  // Placeholder: setProject / openProject / saveProject will come later.
++  noopProject: () => void;
++}
++
++export type ProjectSlice = ProjectState & ProjectActions;
++
++const initialProjectState: ProjectState = {
++  projectName: "Untitled",
++  projectPath: null,
++  timebase: 25,
++};
++
++export const createProjectSlice: StateCreator<
++  ProjectSlice,
++  [],
++  [],
++  ProjectSlice
++> = (set) => ({
++  ...initialProjectState,
++  noopProject: () => set(() => ({})),
++});
+diff --git a/src/stores/slices/timelineSlice.ts b/src/stores/slices/timelineSlice.ts
+new file mode 100644
+index 0000000..a743173
+--- /dev/null
++++ b/src/stores/slices/timelineSlice.ts
+@@ -0,0 +1,33 @@
++import type { StateCreator } from "zustand";
++
++/** Timeline slice — skeleton only (Pixi rendering + clip ops come later). */
++export interface TimelineState {
++  /** Pixels per second at current zoom. */
++  pixelsPerSecond: number;
++  /** Vertical scroll offset in pixels. */
++  scrollY: number;
++  selectedClipId: string | null;
++}
++
++export interface TimelineActions {
++  // Placeholder: addTrack / addClip / moveClip / trimClip will come later.
++  noopTimeline: () => void;
++}
++
++export type TimelineSlice = TimelineState & TimelineActions;
++
++const initialTimelineState: TimelineState = {
++  pixelsPerSecond: 50,
++  scrollY: 0,
++  selectedClipId: null,
++};
++
++export const createTimelineSlice: StateCreator<
++  TimelineSlice,
++  [],
++  [],
++  TimelineSlice
++> = (set) => ({
++  ...initialTimelineState,
++  noopTimeline: () => set(() => ({})),
++});
+diff --git a/src/stores/slices/uiSlice.ts b/src/stores/slices/uiSlice.ts
+new file mode 100644
+index 0000000..59c182e
+--- /dev/null
++++ b/src/stores/slices/uiSlice.ts
+@@ -0,0 +1,28 @@
++import type { StateCreator } from "zustand";
++
++/** UI slice — skeleton only (panels, modals, tool selection come later). */
++export type ActiveTool = "select" | "razor" | "hand";
++
++export interface UiState {
++  activeTool: ActiveTool;
++  sidebarWidth: number;
++  timelineHeight: number;
++}
++
++export interface UiActions {
++  // Placeholder: setActiveTool / resize panels will come later.
++  noopUi: () => void;
++}
++
++export type UiSlice = UiState & UiActions;
++
++const initialUiState: UiState = {
++  activeTool: "select",
++  sidebarWidth: 56,
++  timelineHeight: 260,
++};
++
++export const createUiSlice: StateCreator<UiSlice, [], [], UiSlice> = (set) => ({
++  ...initialUiState,
++  noopUi: () => set(() => ({})),
++});
+diff --git a/src/styles/globals.css b/src/styles/globals.css
+new file mode 100644
+index 0000000..2bf640b
+--- /dev/null
++++ b/src/styles/globals.css
+@@ -0,0 +1,10 @@
++@import "tailwindcss";
++
++/* Base editor theme: full-window, no scrolling */
++html,
++body,
++#root {
++  height: 100%;
++  margin: 0;
++  overflow: hidden;
++}
+diff --git a/vite.config.ts b/vite.config.ts
+index 60bee39..5e31e37 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -1,12 +1,13 @@
+ import { defineConfig } from "vite";
+ import react from "@vitejs/plugin-react";
++import tailwindcss from "@tailwindcss/vite";
+ // @ts-expect-error type error without @types/node package
+ import process from "node:process";
+ const host = process.env.TAURI_DEV_HOST;
+ 
+ // https://vite.dev/config/
+ export default defineConfig(() => ({
+-  plugins: [react()],
++  plugins: [react(), tailwindcss()],
+ 
+   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
+   //
+-- 
+2.39.5
+
