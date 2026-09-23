@@ -1,7 +1,18 @@
+//! Video editor backend skeleton (Tauri 2).
+//!
+//! Modules are placeholders only — no decoding/timeline/export logic yet.
+
+pub mod audio;
+pub mod commands;
+pub mod decoder;
+pub mod gpu;
+pub mod project;
+pub mod proxy;
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn greet(name: String) -> String {
+    format!("Hello, {}! Video editor is ready.", name)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
