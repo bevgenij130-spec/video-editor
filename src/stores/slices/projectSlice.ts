@@ -1,24 +1,34 @@
 import type { StateCreator } from "zustand";
+import type { Project, Track } from "../types";
+import { genId } from "../types";
 
-/** Project slice — skeleton only (no logic yet). */
+/** Project document state. */
 export interface ProjectState {
-  projectName: string;
+  project: Project | null;
   projectPath: string | null;
-  /** Timebase of the current project, e.g. 25, 30, 60 fps. */
-  timebase: number;
 }
 
+/** Project lifecycle actions. */
 export interface ProjectActions {
-  // Placeholder: setProject / openProject / saveProject will come later.
-  noopProject: () => void;
+  newProject: (
+    name: string,
+    fps: number,
+    width: number,
+    height: number,
+  ) => void;
+  /** Load a project from disk. The Rust backend performs the actual IO;
+   *  until that bridge exists this accepts an already-parsed document via
+   *  the optional argument and records only the path otherwise. */
+  loadProject: (path: string, project?: Project) => void;
+  saveProject: () => void;
+  closeProject: () => void;
 }
 
 export type ProjectSlice = ProjectState & ProjectActions;
 
 const initialProjectState: ProjectState = {
-  projectName: "Untitled",
+  project: null,
   projectPath: null,
-  timebase: 25,
 };
 
 export const createProjectSlice: StateCreator<
@@ -28,5 +38,49 @@ export const createProjectSlice: StateCreator<
   ProjectSlice
 > = (set) => ({
   ...initialProjectState,
-  noopProject: () => set(() => ({})),
+
+  newProject: (name, fps, width, height) =>
+    set(() => {
+      const now = new Date().toISOString();
+      const project: Project = {
+        id: genId(),
+        name,
+        fps,
+        width,
+        height,
+        tracks: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      return { project, projectPath: null };
+    }),
+
+  loadProject: (path, project) =>
+    set((state) => {
+      const loaded: Project =
+        project ??
+        state.project ?? {
+          id: genId(),
+          name: path.split(/[\\/]/).pop() ?? "Untitled",
+          fps: 25,
+          width: 1920,
+          height: 1080,
+          tracks: [] as Track[],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      return { projectPath: path, project: loaded };
+    }),
+
+  saveProject: () =>
+    set((state) => {
+      if (!state.project) return state;
+      const now = new Date().toISOString();
+      return {
+        project: { ...state.project, updatedAt: now },
+        projectPath: state.projectPath ?? `${state.project.name}.vep`,
+      };
+    }),
+
+  closeProject: () => set(() => ({ ...initialProjectState })),
 });
