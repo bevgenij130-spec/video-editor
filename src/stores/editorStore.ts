@@ -273,6 +273,10 @@ export const editorHistory = {
   undo: () => getTemporalStore().getState().undo(),
   redo: () => getTemporalStore().getState().redo(),
   clear: () => getTemporalStore().getState().clear(),
+  /** Stop pushing new snapshots (used during continuous drags). */
+  pause: () => getTemporalStore().getState().pause(),
+  /** Resume snapshot tracking after a {@link pause}. */
+  resume: () => getTemporalStore().getState().resume(),
   canUndo: () => getTemporalStore().getState().pastStates.length > 0,
   canRedo: () => getTemporalStore().getState().futureStates.length > 0,
 };

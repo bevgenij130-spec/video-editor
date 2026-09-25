@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { PreviewCanvas } from "./components/Preview/PreviewCanvas";
 import { TransportControls } from "./components/Controls/TransportControls";
-import { TimelinePixi } from "./components/Timeline/TimelinePixi";
+import { Timeline } from "./components/Timeline/Timeline";
 
 /** Editor skeleton layout: sidebar | (preview over timeline), full window. */
 function App() {
@@ -38,7 +38,7 @@ function App() {
 
         {/* Timeline area (darker) */}
         <section className="h-64 shrink-0 border-t border-zinc-800 bg-[#0d0d10]">
-          <TimelinePixi />
+          <Timeline />
         </section>
       </main>
     </div>
