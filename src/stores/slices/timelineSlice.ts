@@ -6,6 +6,13 @@ import { genId } from "../types";
 export interface TimelineState {
   tracks: Track[];
   selectedClipIds: string[];
+  /**
+   * Currently highlighted track (header click / sidebar remove target).
+   * Lives in timelineSlice (not uiSlice) because it is resolved together
+   * with clip selection by the remove-track flow and belongs to timeline
+   * selection state. It is excluded from undo history via partialize/equality.
+   */
+  selectedTrackId: string | null;
   /** Playhead position in seconds. */
   playheadPosition: number;
 }
@@ -24,6 +31,8 @@ export interface TimelineActions {
   splitClip: (clipId: string, atTime: number) => void;
   selectClip: (id: string, multi?: boolean) => void;
   clearSelection: () => void;
+  /** Highlight a track header; `null` clears. Not recorded in undo history. */
+  selectTrack: (id: string | null) => void;
   setPlayhead: (time: number) => void;
 }
 
@@ -32,6 +41,7 @@ export type TimelineSlice = TimelineState & TimelineActions;
 const initialTimelineState: TimelineState = {
   tracks: [],
   selectedClipIds: [],
+  selectedTrackId: null,
   playheadPosition: 0,
 };
 
@@ -79,6 +89,7 @@ export const createTimelineSlice: StateCreator<
         selectedClipIds: state.selectedClipIds.filter(
           (cid) => !removedClipIds.has(cid),
         ),
+        selectedTrackId: state.selectedTrackId === id ? null : state.selectedTrackId,
       };
     }),
 
@@ -183,7 +194,11 @@ export const createTimelineSlice: StateCreator<
 
   selectClip: (id, multi = false) =>
     set((state) => {
-      if (!multi) return { selectedClipIds: [id] };
+      const owner = state.tracks.find((t) =>
+        t.clips.some((c) => c.id === id),
+      );
+      if (!multi)
+        return { selectedClipIds: [id], selectedTrackId: owner?.id ?? null };
       return {
         selectedClipIds: state.selectedClipIds.includes(id)
           ? state.selectedClipIds.filter((x) => x !== id)
@@ -192,6 +207,8 @@ export const createTimelineSlice: StateCreator<
     }),
 
   clearSelection: () => set({ selectedClipIds: [] }),
+
+  selectTrack: (id) => set({ selectedTrackId: id }),
 
   setPlayhead: (time) => set({ playheadPosition: Math.max(0, time) }),
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TimelineRenderer,
+  CONTENT_LEFT,
   RULER_HEIGHT,
   TRACK_HEIGHT,
   type TimelineRenderState,
@@ -29,6 +30,7 @@ const toRenderState = (
     zoom: s.timelineZoom,
     scrollX,
     selectedClipIds: s.selectedClipIds,
+    selectedTrackId: s.selectedTrackId,
     width: el.clientWidth,
     height: el.clientHeight,
   };
@@ -85,6 +87,7 @@ export function TimelinePixi({ onScrollChange }: TimelinePixiProps) {
         state.tracks !== prev.tracks ||
         state.playheadPosition !== prev.playheadPosition ||
         state.selectedClipIds !== prev.selectedClipIds ||
+        state.selectedTrackId !== prev.selectedTrackId ||
         state.timelineZoom !== prev.timelineZoom
       ) {
         scheduleRender();
@@ -106,6 +109,16 @@ export function TimelinePixi({ onScrollChange }: TimelinePixiProps) {
       // Only left button; clip drags are handled by the DOM overlay which
       // stops propagation before reaching the canvas.
       if (e.button !== 0) return;
+      const rect = canvas.getBoundingClientRect();
+      // Click inside the track-header gutter selects/deselects a track
+      // instead of moving the playhead.
+      if (e.clientX - rect.left < CONTENT_LEFT && e.clientY - rect.top >= RULER_HEIGHT) {
+        const idx = Math.floor((e.clientY - rect.top - RULER_HEIGHT) / TRACK_HEIGHT);
+        const tracks = useEditorStore.getState().tracks;
+        const track = idx >= 0 && idx < tracks.length ? tracks[idx] : undefined;
+        useEditorStore.getState().selectTrack(track ? (track.id === useEditorStore.getState().selectedTrackId ? null : track.id) : null);
+        return;
+      }
       draggingPlayhead = true;
       canvas.setPointerCapture(e.pointerId);
       useEditorStore.getState().seek(timeAtX(e.clientX));

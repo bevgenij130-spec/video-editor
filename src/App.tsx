@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { PreviewCanvas } from "./components/Preview/PreviewCanvas";
 import { TransportControls } from "./components/Controls/TransportControls";
 import { Timeline } from "./components/Timeline/Timeline";
+import { Sidebar } from "./components/Sidebar/Sidebar";
 
 /** Editor skeleton layout: sidebar | (preview over timeline), full window. */
 function App() {
@@ -14,19 +15,7 @@ function App() {
 
   return (
     <div className="flex h-screen w-screen select-none overflow-hidden bg-zinc-950 text-zinc-100">
-      {/* Left vertical tool sidebar */}
-      <aside className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-zinc-800 bg-zinc-900 py-3">
-        <button type="button" className="h-9 w-9 rounded bg-zinc-800 text-sm hover:bg-zinc-700" title="Select">
-          ▸
-        </button>
-        <button type="button" className="h-9 w-9 rounded bg-zinc-800 text-sm hover:bg-zinc-700" title="Razor">
-          ✂
-        </button>
-        <button type="button" className="h-9 w-9 rounded bg-zinc-800 text-sm hover:bg-zinc-700" title="Hand">
-          ✋
-        </button>
-      </aside>
-
+      <Sidebar />
       {/* Main column: preview on top, timeline at bottom */}
       <main className="flex min-w-0 flex-1 flex-col">
         {/* Preview area (dark) */}

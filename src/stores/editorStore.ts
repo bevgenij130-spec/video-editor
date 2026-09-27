@@ -105,6 +105,7 @@ export const useProject = (): {
 export const useTimeline = (): {
   tracks: Track[];
   selectedClipIds: string[];
+  selectedTrackId: string | null;
   playheadPosition: number;
 } =>
   useStoreWithEqualityFn(
@@ -112,6 +113,7 @@ export const useTimeline = (): {
     (s) => ({
       tracks: s.tracks,
       selectedClipIds: s.selectedClipIds,
+      selectedTrackId: s.selectedTrackId,
       playheadPosition: s.playheadPosition,
     }),
     shallow,
@@ -188,6 +190,7 @@ export interface EditorActions {
   splitClip: (clipId: string, atTime: number) => void;
   selectClip: (id: string, multi?: boolean) => void;
   clearSelection: () => void;
+  selectTrack: (id: string | null) => void;
   setPlayhead: (time: number) => void;
   play: () => void;
   pause: () => void;
@@ -225,6 +228,7 @@ export const useEditorActions = (): EditorActions =>
       splitClip: s.splitClip,
       selectClip: s.selectClip,
       clearSelection: s.clearSelection,
+      selectTrack: s.selectTrack,
       setPlayhead: s.setPlayhead,
       play: s.play,
       pause: s.pause,
