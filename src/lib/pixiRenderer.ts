@@ -18,6 +18,7 @@ const COLOR_CLIP_AUDIO = 0x16a34a; // green
 const COLOR_CLIP_IMAGE = 0x9333ea; // purple
 const COLOR_PLAYHEAD = 0xef4444; // red
 const COLOR_SELECTION = 0xffffff; // white
+const COLOR_TRACK_SELECTED = 0x3b82f6; // blue — selected-track indicator
 const COLOR_TICK = 0x3f3f46;
 
 /** Everything the renderer needs to draw one frame of the timeline. */
@@ -30,6 +31,8 @@ export interface TimelineRenderState {
   /** Horizontal scroll offset in pixels. */
   scrollX: number;
   selectedClipIds: string[];
+  /** Track highlighted via header click (left gutter). */
+  selectedTrackId: string | null;
   width: number;
   height: number;
 }
@@ -152,9 +155,13 @@ export class TimelineRenderer {
         .fill(i % 2 === 0 ? COLOR_LANE_A : COLOR_LANE_B);
       this.bg.rect(CONTENT_LEFT, y + TRACK_HEIGHT - 1, width - CONTENT_LEFT, 1).fill(0x26262c);
       // track header cell + gutter separator
-      this.bg.rect(0, y, CONTENT_LEFT, TRACK_HEIGHT).fill(0x1a1a20);
+      const trackSelected = track.id === state.selectedTrackId;
+      this.bg.rect(0, y, CONTENT_LEFT, TRACK_HEIGHT).fill(trackSelected ? 0x1e293b : 0x1a1a20);
       this.bg.rect(0, y + TRACK_HEIGHT - 1, CONTENT_LEFT, 1).fill(0x26262c);
-      void track;
+      // left indicator bar (#3b82f6) on the selected track header
+      if (trackSelected) {
+        this.bg.rect(0, y, 3, TRACK_HEIGHT).fill(COLOR_TRACK_SELECTED);
+      }
     });
     if (tracks.length > 0) {
       this.bg
